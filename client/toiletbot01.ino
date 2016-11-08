@@ -1,46 +1,71 @@
-#define BUTTON 5
 #include <ESP8266WiFi.h>
 
-int reading;
-int previous = LOW;
-int value;
-const char* ssid     = "TwentyNine";
-const char* password = "TryListening";
-const char* host = "192.168.1.102";
-
-void setup() {
-  pinMode(BUTTON, INPUT_PULLUP);
-  Serial.begin(115200);
-  delay(10);  
-  WiFi.begin(ssid, password); 
+extern "C" {
+#include "gpio.h"
+}
+extern "C" {
+#include "user_interface.h"
 }
 
-void loop() {
-  reading = digitalRead(BUTTON);
-  if (reading == LOW && previous == HIGH) {
-    Serial.println("engaged");
-    req();
+const int buttonPin = 12; 
+const int ledPin = 5;  
+int reading = HIGH;
+int previous = HIGH;
+
+const char* ssid = SSID;
+const char* password = PASSWORD;
+
+const int httpPort = 3000;
+const char* host = URL;
+
+void setup() 
+{
+  gpio_init();
+  pinMode(ledPin, OUTPUT);
+  pinMode(buttonPin, INPUT);
+  Serial.begin(115200);
+  delay(100);
+   
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  delay(1000);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
     delay(300);
   }
+ 
+  Serial.println("WiFi connected");  
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void loop() 
+{
+  reading = digitalRead(buttonPin);
+  if (reading == LOW && previous == HIGH) {
+    request("/open");
+    delay(300);
+    Serial.println("Ready to go into light sleep...");
+    delay(1000);
+    sleep();
+  }
   if (reading == HIGH && previous == LOW) {
-    Serial.println("vacant");
-    req();
+    request("/close");
     delay(300);
   }
   previous = reading;
 }
 
-void req() {
-  // Use WiFiClient class to create TCP connections
+void request(String url) 
+{  
   WiFiClient client;
-  const int httpPort = 3000;
   if (!client.connect(host, httpPort)) {
     Serial.println("connection failed");
+    delay(300);
+    request(url);
     return;
   }
-  
-  // We now create a URI for the request
-  String url = "192.168.1.102";
   
   Serial.print("Requesting URL: ");
   Serial.println(url);
@@ -48,23 +73,32 @@ void req() {
   client.print(String("GET ") + url + " HTTP/1.1\r\n" +
                "Host: " + host + "\r\n" + 
                "Connection: close\r\n\r\n");
-  unsigned long timeout = millis();
-  while (client.available() == 0) {
-    if (millis() - timeout > 5000) {
-      Serial.println(">>> Client Timeout !");
-      client.stop();
-      return;
-    }
-  }
-  
-  // Read all the lines of the reply from server and print them to Serial
-  while(client.available()){
-    String line = client.readStringUntil('\r');
-    Serial.print(line);
-  }
+  delay(500);
   
   Serial.println();
   Serial.println("closing connection");
 }
 
+void wake(void) 
+{
+  wifi_fpm_close;
+  wifi_set_opmode(STATION_MODE);
+  wifi_station_connect();
+  Serial.println("Woke up from sleep");
+  reading == HIGH; 
+}
 
+
+void sleep() 
+{
+  Serial.println("Going to light sleep...");
+  wifi_station_disconnect();
+  wifi_set_opmode(NULL_MODE);
+  wifi_fpm_set_sleep_type(LIGHT_SLEEP_T);
+  gpio_pin_wakeup_enable(GPIO_ID_PIN(12), GPIO_PIN_INTR_HILEVEL);
+  wifi_fpm_open();
+  delay(100);
+  wifi_fpm_set_wakeup_cb(wake);
+  wifi_fpm_do_sleep(0xFFFFFFF); 
+  delay(100);
+}
