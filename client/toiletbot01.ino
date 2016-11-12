@@ -1,4 +1,5 @@
 #include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
 
 extern "C" {
 #include "gpio.h"
@@ -7,16 +8,16 @@ extern "C" {
 #include "user_interface.h"
 }
 
+String SLACK_SSL_FINGERPRINT = "AB F0 5B A9 1A E0 AE 5F CE 32 2E 7C 66 67 49 EC DD 6D 6A 38";
+String SLACK_BOT_TOKEN = "your-bot-token-here";
+
+const char* ssid = "your-ssid-password-here";
+const char* password = "your-wifi-password-here";
+
 const int buttonPin = 12; 
 const int ledPin = 5;  
 int reading = HIGH;
 int previous = HIGH;
-
-const char* ssid = SSID;
-const char* password = PASSWORD;
-
-const int httpPort = 3000;
-const char* host = URL;
 
 void setup() 
 {
@@ -43,40 +44,36 @@ void setup()
 void loop() 
 {
   reading = digitalRead(buttonPin);
+  digitalWrite(ledPin, reading);
   if (reading == LOW && previous == HIGH) {
-    request("/open");
+    request("auto");
     delay(300);
     Serial.println("Ready to go into light sleep...");
     delay(1000);
     sleep();
   }
   if (reading == HIGH && previous == LOW) {
-    request("/close");
+    request("away");
     delay(300);
   }
   previous = reading;
 }
 
-void request(String url) 
-{  
-  WiFiClient client;
-  if (!client.connect(host, httpPort)) {
-    Serial.println("connection failed");
+void request(String url) {
+  HTTPClient http;
+  Serial.println("https://slack.com/api/users.setPresence?token=" + SLACK_BOT_TOKEN + "&presence=" + url);
+  http.begin("https://slack.com/api/users.setPresence?token=" + SLACK_BOT_TOKEN + "&presence=" + url, SLACK_SSL_FINGERPRINT);
+  int httpCode = http.GET();
+
+  if (httpCode != HTTP_CODE_OK) {
+    Serial.printf("HTTP GET failed with code %d\n", httpCode);
     delay(300);
     request(url);
     return;
   }
-  
-  Serial.print("Requesting URL: ");
-  Serial.println(url);
-  
-  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
-               "Host: " + host + "\r\n" + 
-               "Connection: close\r\n\r\n");
-  delay(500);
-  
-  Serial.println();
-  Serial.println("closing connection");
+  else {
+    Serial.printf("HTTP GET success with code %d\n", httpCode);
+  } 
 }
 
 void wake(void) 
