@@ -2,7 +2,6 @@
 #include <ESP8266HTTPClient.h>
 #include "config.h"
 
-
 extern "C" {
 #include "gpio.h"
 }
@@ -39,8 +38,11 @@ void loop() {
 void request(String url) {
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
+    digitalWrite(ledPin, !digitalRead(ledPin));
     Serial.print(".");
   }
+  digitalWrite(ledPin, LOW);
+  delay(300);
   http.begin("https://slack.com/api/users.setPresence?token=" + SLACK_BOT_TOKEN + "&presence=" + url, SLACK_SSL_FINGERPRINT);
   int httpCode = http.GET();
   if (httpCode == HTTP_CODE_OK) {
@@ -59,7 +61,6 @@ void wake(void) {
   wifi_set_opmode(STATION_MODE);
   wifi_station_connect();
   Serial.println("Waking");
-  digitalWrite(ledPin, HIGH);
   previous = LOW;
 }
 
@@ -86,7 +87,9 @@ void connectWiFi() {
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
+    digitalWrite(ledPin, !digitalRead(ledPin));
   }
+  digitalWrite(ledPin, LOW);
   Serial.println();
   Serial.print("Connected, IP address: ");
   Serial.println(WiFi.localIP());
@@ -99,4 +102,3 @@ void initHardware() {
   Serial.begin(115200);
   Serial.println();
 }
-
